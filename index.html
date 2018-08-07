@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8" />
-<title>Operations Scheduling via Dynamic Programming</title><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.10/require.min.js"></script>
+<title>A Dynamic Programming Tutorial</title><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.10/require.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
 
 <style type="text/css">
@@ -11831,8 +11831,8 @@ div#notebook {
 <div class="text_cell_render border-box-sizing rendered_html">
 <p>I find that there are many still wrapping their heads around what exactly is dynamic programming. Some think it's just memoization plus recursion -- but really, it's more than that. It's an approach that exploits properties of the problem that allow for an elegant method to finding the optimal solution.</p>
 <p>The approach is a bit like induction: first we solve a base case, then we show that the solution method gives an optimal solution for a problem of size $n$, then we show that the solution also works for a problem of size $n+1$ using one more step of the solution method.</p>
-<p>However, the solution method returns not just one solution but all viable (i.e., not discarded) solutions. That's okay because dynamic programming requires collecting high-quality solutions while discarding as many low-quality ones as early as possible. It's only at the end that we sort through them to find the solution that is optimal for our problem. Dynamic programming is thus the happiest marriage of induction, recursion, and greedy optimization.</p>
-<p>The "dynamic" part of this approach is that we only have to apply one function repeatedly to the problem, and that function "dynamically" partitions the solution space into valid and invalid solutions as it progresses based on what it's already seen and where it is in its search.</p>
+<p>What differentiates dynamic programming from other recursion-based search methods is that we cache the results of the solutions to subproblems so that the computation need only occur once instead of $O(2^m)$ times, where $m$ is the level of the subproblem. We also exploit a recursive definition of the problem so that we end up with an elegant and compact solution method. Dynamic programming is thus the happiest marriage of induction, recursion, and greedy optimization.</p>
+<p>The "dynamic" part of this approach is that we only have to apply one function repeatedly to the problem, and this function will return optimal values of the full problem as well as any sub- or superproblem.</p>
 
 </div>
 </div>
@@ -11859,106 +11859,31 @@ div#notebook {
 <div class="text_cell_render border-box-sizing rendered_html">
 <p>You are an operations specialist in a company whose supply chain is undergoing restructuring. The machines you own are failing, so you've done your research and have collected a number of offers for buying and selling machines while your supply chain is brought back up to speed.</p>
 <ul>
-<li><p>You may only use one machine at a time, and must sell the one you own before buying another.</p>
+<li><p>Only one machine may be used at a time, and you must sell the machine you own before buying another;</p>
 </li>
-<li><p>You can only buy machines with the cash you have in hand at that instant.</p>
+<li><p>You can only buy machines with the cash you have in hand at that instant;</p>
 </li>
-<li><p>Each machine $i$ has</p>
+<li><p>Each machine $i$ has:</p>
 <ul>
 <li><p>a day of availability $D_i$,</p>
 </li>
 <li><p>purchase cost $P_i$,</p>
 </li>
-<li><p>resale value $R_i&lt;P_i$, and</p>
+<li><p>resale value $R_i &lt; P_i$, and</p>
 </li>
-<li><p>a certain amount of profit generated per day $G_i$.</p>
+<li><p>a certain amount of profit generated per day $G_i$;</p>
 </li>
 </ul>
 </li>
-<li><p>You can't earn any money on a day where you are buying and selling machines since they must be taken offline first.</p>
+<li><p>A machine $i$ is <em>only</em> available on one day, $D_i$;</p>
+</li>
+<li><p>You can't earn any money on a day where you are buying a machine since the one you already have must be taken offline and switched out.</p>
 </li>
 </ul>
 <p>Your task is to determine exactly which machines to buy and sell to maximize profit during the restructuring period.</p>
 
 </div>
 </div>
-</div>
-<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
-</div>
-<div class="inner_cell">
-<div class="text_cell_render border-box-sizing rendered_html">
-<p>Let's start by making a couple utilities that let us instantiate a problem case.</p>
-
-</div>
-</div>
-</div>
-<div class="cell border-box-sizing code_cell rendered">
-<div class="input">
-<div class="prompt input_prompt">In&nbsp;[2]:</div>
-<div class="inner_cell">
-    <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span class="k">class</span> <span class="nc">Case</span><span class="p">:</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inits</span><span class="p">,</span> <span class="n">specs</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">inits</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">inits</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">orig_specs</span> <span class="o">=</span> <span class="n">specs</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">specs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">specs</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">0</span><span class="p">)))</span>
-    <span class="k">def</span> <span class="nf">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">inits</span><span class="o">.</span><span class="n">__repr__</span><span class="p">()</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">orig_specs</span><span class="o">.</span><span class="n">__repr__</span><span class="p">()</span>
-        
-        
-<span class="k">def</span> <span class="nf">generate_case</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">D</span><span class="p">):</span>
-    <span class="n">specs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">N</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
-    <span class="n">specs</span><span class="p">[:,</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">C</span><span class="p">),</span> <span class="n">size</span><span class="o">=</span><span class="n">N</span><span class="p">)</span>                    <span class="c1"># Gi</span>
-    <span class="n">specs</span><span class="p">[:,</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">D</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">N</span><span class="p">)</span>                             <span class="c1"># Di</span>
-    <span class="n">specs</span><span class="p">[:,</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">N</span><span class="p">)</span>                               <span class="c1"># Ri</span>
-    <span class="n">specs</span><span class="p">[:,</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="n">Ri</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">C</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">Ri</span> <span class="ow">in</span> <span class="n">specs</span><span class="p">[:,</span><span class="mi">2</span><span class="p">]])</span> <span class="c1"># Pi &gt; Ri</span>
-    <span class="k">return</span> <span class="n">Case</span><span class="p">((</span><span class="n">N</span><span class="p">,</span><span class="n">C</span><span class="p">,</span><span class="n">D</span><span class="p">),</span> <span class="n">specs</span><span class="p">)</span>
-</pre></div>
-
-</div>
-</div>
-</div>
-
-</div>
-<div class="cell border-box-sizing code_cell rendered">
-<div class="input">
-<div class="prompt input_prompt">In&nbsp;[3]:</div>
-<div class="inner_cell">
-    <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span class="n">cases</span> <span class="o">=</span> <span class="p">[</span><span class="n">generate_case</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">)]</span>
-<span class="n">cases</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-</pre></div>
-
-</div>
-</div>
-</div>
-
-<div class="output_wrapper">
-<div class="output">
-
-
-<div class="output_area">
-
-<div class="prompt output_prompt">Out[3]:</div>
-
-
-
-
-<div class="output_text output_subarea output_execute_result">
-<pre>[6, 10, 20]
-array([[ 5.,  9.,  1.,  3.],
-       [18., 10.,  9.,  5.],
-       [ 6., 10.,  6.,  1.],
-       [11.,  5.,  3.,  2.],
-       [18.,  9.,  4.,  1.],
-       [ 9., 10.,  9.,  1.]])</pre>
-</div>
-
-</div>
-
-</div>
-</div>
-
 </div>
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div>
@@ -11972,11 +11897,22 @@ array([[ 5.,  9.,  1.,  3.],
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
+<p>To really get a grip on this problem, it's vital to be able to define the problem statement in terms of the composition of subproblems. We must identify the atomic subproblem upon which problems of increasing size are built.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
 <p>To figure out how to attack this problem, let's start off by listing some of its properties:</p>
 <ol>
-<li><p>for each machine on offer, there are two possible courses of action: either we buy the machine, or we do not;</p>
+<li><p>we only care about the moments when we have the opportunity to buy a new machine and sell the old one because we can easily compute the profit gained between and during purchases and the function for calculating the profit is deterministic;</p>
 </li>
-<li><p>the outcome of a given decision is not constrained by any previous or future decisions besides the constraints on the evolving state of the system;</p>
+<li><p>state transitions only occur when machines are purchased;</p>
+</li>
+<li><p>the outcome of a given purchase is not constrained by any previous or future purchases besides the constraints on the evolving state of the system;</p>
 </li>
 <li><p>if the cash-only constraint is violated at any time, any solutions derived from the present partial solution are infeasible.</p>
 </li>
@@ -11990,10 +11926,7 @@ array([[ 5.,  9.,  1.,  3.],
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Property 1 indicates that the solution space is of size $2^N$. This is because, at each step in the solution, our solution space doubles as there are two possible paths from that step. Thus the solution space grows exponentially with increasing $N$, and we are dealing with a case where our strategy for exploring the solution space requires some consideration.</p>
-<p>Property 2 indicates that this problem is decomposable into subproblems with identical properties as the original. To get a sense of this, consider: after step $m &lt; N$ in constructing a solution, we can treat the current partial solution as a full solution to the subproblem where only $m$ machines are provided in the case. We can then solve the problem of size $m+1$, $m+2$, and so on up to $N$. We are confident of the optimality of the final solution because the solution of each subproblem along the way was also optimal, and each step used the same method to go from one level to the next.</p>
-<p>Property 3 is the key to efficiently searching the solution space. As a corrolary to property 2, we know also that any condition that prevents a solution of a given subproblem from being feasible also disqualifies all solutions which are derived from the subproblem. We will exploit this later in two different ways to speed up our algorithm considerably.</p>
-
+<h3 id="Modelling-the-Problem">Modelling the Problem<a class="anchor-link" href="#Modelling-the-Problem">&#182;</a></h3>
 </div>
 </div>
 </div>
@@ -12001,37 +11934,10 @@ array([[ 5.,  9.,  1.,  3.],
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h3 id="Modelling-the-Problem:-Recursion-and-Trees">Modelling the Problem: Recursion and Trees<a class="anchor-link" href="#Modelling-the-Problem:-Recursion-and-Trees">&#182;</a></h3>
-</div>
-</div>
-</div>
-<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
-</div>
-<div class="inner_cell">
-<div class="text_cell_render border-box-sizing rendered_html">
-<p>So how do we model our progress through the problem? We want a data structure which exhibits the same properties as the problem. In particular, we want a data structure which contains smaller versions of itself (self-similarity) and which models efficiently a series of steps with a finite and integer number of choices at each step (branching process). How we traverse the data structure should also reflect the problem: we require that there is a unique path through the steps that arrives at a unique solution. Finally, because we want to be agnostic to the number of steps taken so far or remaining, we must build an algorithm which applies the same function at each step in the process.</p>
-
-</div>
-</div>
-</div>
-<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
-</div>
-<div class="inner_cell">
-<div class="text_cell_render border-box-sizing rendered_html">
-<p>Putting all this together, we recognize that <em>recursion</em> will play a large role. Recursion is nothing more than applying the same function to a smaller version of the original input until we reach a "base case", which is triggered when the traversal reaches a full solution.</p>
-<p>In any case, we now expect that to solve this problem, we need to find all feasible solutions by traversing the tree, then simply compare the full set and return the one(s) that achieve(s) the highest score.</p>
-<p>Our last insight to an efficient solution is the conclusion drawn from property 3 of the problem listed above. We can see that if the progress of building a solution leads to a violation of constraints, the entire subtree will also be invalid because any state of the system that is achieved during any further progress toward a solution is impossible according to the definition of the problem. Then we can abandon any further evaluation of that subtree and instead search for solutions that we know do not violate the constraints.</p>
-
-</div>
-</div>
-</div>
-<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
-</div>
-<div class="inner_cell">
-<div class="text_cell_render border-box-sizing rendered_html">
-<p>Our base case is the state where we have made decisions about all machines and are ready to return our final cash amount.</p>
-<p>If we only have a partial solution, we take the next step by making a decision about the next machine and then paying out and collecting money as defined by the problem statement. We carry this money with us through the evaluations to keep track of how much we earned. If at any point the cash-only constraint is violated, the function neglects to search further and returns an empty list prematurely. We design this behavior into the function to avoid performing calculations on what we can prove are futile tasks, and instead spend the time and effort searching among solutions we know to be feasible.</p>
-<p>I think this last point is worth spending some time on, because it's at the crux of confusion for many people. The "memoization" that many people hear about is nothing other than storing the solutions that are explored fully and checking them at the end. Rather, the important storage of information is the state of the system as it passes through and is modified by the steps that lead to a solution. The flip side of the memoization coin is that we throw away the solutions that we <em>don't</em> want in addition to keeping the solutions we do.</p>
+<p>One way to model this problem is as a graph, where nodes are machine-purchases and edges are the amount of profit gained between purchases. In this case, we can easily calculate the profit gained between the actions of buying machine $i$ and machine $j$ (and not paying for any machines between $i$ and $j$). Because the profit function is deterministic, we can store these computations and recall them instead of recomputing them many times over.</p>
+<p>We include two additional nodes, one at the beginning and one at the end, to represent respectively the initial and final states of the system. The reason for this is to avoid having to deal with boundary cases in the <code>profit()</code> function. Then we model our decision process as a path in this graph.</p>
+<p>Ultimately we must find the path with the highest value whose running sum never drops below zero. However this constraint on the problem makes it very hard to solve with traditional graph methods like shortest-path algorithms. So we must use a more iterative approach, akin to a search for a highest-value path but with additional stopping conditions if the present path is infeasible according to the constraint. Because of the irreversibility of time, the graph is guaranteed acyclic.</p>
+<p>All these properties reinforce the notion that treating this problem as the successive optimization of larger and larger subproblems will prove fruitful. So we recognize that <em>recursion</em> will play a large role. Recursion is nothing more than applying the same function to a smaller version of the original input until we reach a "base case". Our base case is just any path which begins at the initial state and ends at the final state.</p>
 
 </div>
 </div>
@@ -12048,8 +11954,120 @@ array([[ 5.,  9.,  1.,  3.],
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Below we find an instance of a recursive function which solves this scheduling problem via dynamic programming. Comments serve as annotation to describe the different components of the function.</p>
+<p>First, we need to be able to generate and represent a problem case.</p>
 
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[2]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span class="k">class</span> <span class="nc">Case</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inits</span><span class="p">,</span> <span class="n">specs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inits</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">inits</span><span class="p">)</span>
+        <span class="c1"># store `specs` in the original format</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">orig_specs</span> <span class="o">=</span> <span class="n">specs</span>
+        <span class="c1"># create also a `specs` which has an initial and final state added to it, and is sorted for easy processing</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">specs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">inits</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">0</span><span class="p">]]),</span>
+                                <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">specs</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">0</span><span class="p">))),</span>
+                                <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="bp">self</span><span class="o">.</span><span class="n">inits</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]])])</span>
+
+<span class="k">def</span> <span class="nf">generate_case</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">D</span><span class="p">):</span>
+    <span class="n">inits</span> <span class="o">=</span> <span class="p">(</span><span class="n">N</span><span class="p">,</span><span class="n">C</span><span class="p">,</span><span class="n">D</span><span class="p">)</span>
+    <span class="n">specs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">N</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+    <span class="n">specs</span><span class="p">[:,</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">C</span><span class="p">),</span> <span class="n">size</span><span class="o">=</span><span class="n">N</span><span class="p">)</span>                                 <span class="c1"># Gi</span>
+    <span class="n">specs</span><span class="p">[:,</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">D</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">N</span><span class="p">)</span>                               <span class="c1"># Di</span>
+    <span class="n">specs</span><span class="p">[:,</span><span class="mi">1</span><span class="p">:</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="n">N</span><span class="p">,</span><span class="mi">2</span><span class="p">)),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)[:,::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>  <span class="c1"># Pi &gt; Ri</span>
+    <span class="k">return</span> <span class="n">Case</span><span class="p">(</span><span class="n">inits</span><span class="p">,</span> <span class="n">specs</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>You will notice above that <code>specs</code> is saved in a form which makes traversal easier. In particular, we treat the initial state as being represented by another machine which makes no profit and has a resale value equivalent to the starting cash amount. Further, the final state is assigned to a particular day but neither requires any money to "buy" nor generates any profit. This way we can define a <code>profit()</code> function that handles the boundary conditions naturally.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>It's useful to be able to calculate how much money we earn between purchases of machines. This amount will be constant over the course of the problem and will need to be recalled many times.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[3]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span class="k">def</span> <span class="nf">profit</span><span class="p">(</span><span class="n">spec1</span><span class="p">,</span> <span class="n">spec2</span><span class="p">):</span>
+    
+    <span class="c1"># Two lines of `specs` which describe two possible states</span>
+    <span class="n">d1</span><span class="p">,</span> <span class="n">p1</span><span class="p">,</span> <span class="n">r1</span><span class="p">,</span> <span class="n">g1</span> <span class="o">=</span> <span class="n">spec1</span>
+    <span class="n">d2</span><span class="p">,</span> <span class="n">p2</span><span class="p">,</span> <span class="n">r2</span><span class="p">,</span> <span class="n">g2</span> <span class="o">=</span> <span class="n">spec2</span>
+    
+    <span class="c1"># we cannot travel back in time</span>
+    <span class="k">if</span> <span class="n">d1</span> <span class="o">&gt;=</span> <span class="n">d2</span><span class="p">:</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+    
+    <span class="c1"># the first term is the profit generated from running machine 1</span>
+    <span class="c1"># the second term is the resale value of machine 1</span>
+    <span class="c1"># the third term is the purchase cost of machine 2</span>
+    <span class="k">return</span> <span class="n">g1</span> <span class="o">*</span> <span class="p">(</span><span class="n">d2</span> <span class="o">-</span> <span class="n">d1</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="n">r1</span> <span class="o">-</span> <span class="n">p2</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The definition of <code>profit()</code> above implies that the moment in time represented by a state-node in the graph is immediately following the purchase of the new machine.</p>
+<p>So now we have our subproblem. It can be summarized as the question, "Given a certain initial cash amount and a time horizon, how much can I profit if there is one machine offered and the cash constraint is enforced?" The answer to this question is zero if the <code>profit()</code> function returns a negative number with magnitude greater than the original cash amount, and positive if it turns out buying the machine is beneficial in the long run.</p>
+<p>The beauty of dynamic programming comes in its exploitation of the memoizability of the problem's components. In our case, we know we can cache the amount of profit gained between machines $i$ and $j$ and recall this number when computing the path value.  As we walk recursively through the graph, we only need to track our current cash amount by adding these precomputed values and follow the paths which satisfy the constraint.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="The-Bellman-Equation">The Bellman Equation<a class="anchor-link" href="#The-Bellman-Equation">&#182;</a></h3>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The man who developed dynamic programming, Richard Bellman, did so on the coattails of his principle of optimality, from which the optimal substructure property is derived and which makes it possible to create elegant solutions to combinatorial problems such as this one.</p>
+<p>At its most basic, the Bellman equation describes the iterative accumulation of value as actions are taken toward a final solution,</p>
+<p>$$ V(x_i) = \max_{a_i} \left\{ F(x_i, a_i) + V(x_{i+1}) \right\}, \quad x_{i+1} = T(x_i, a_i) $$</p>
+<p>where $x_i$ is the state, $a_i$ is an action, $F$ is the atomic value function (in our case, <code>profit()</code>), $T$ is the state transition function from $i$ to $i+1$, and $V$ is of course the value of the solution. For our purposes, $a_i \in \{0,1\}$ represents the choice to purchase machine $i$: 1 for yes, 0 for no. $x_i$ stores the machines' properties as well as the profit accumulated so far. Thus to maximize this, we must first recursively dive toward the end of the solution and return back out with the maximum value by greedily maximizing each subproblem, starting with the smallest ones.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Coding-It-Up">Coding It Up<a class="anchor-link" href="#Coding-It-Up">&#182;</a></h3>
 </div>
 </div>
 </div>
@@ -12058,121 +12076,44 @@ array([[ 5.,  9.,  1.,  3.],
 <div class="prompt input_prompt">In&nbsp;[4]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span class="k">class</span> <span class="nc">Machine</span><span class="p">:</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">g</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">p</span> <span class="o">=</span> <span class="n">p</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">r</span> <span class="o">=</span> <span class="n">r</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">g</span> <span class="o">=</span> <span class="n">g</span>
-    <span class="k">def</span> <span class="nf">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="s2">&quot;[&quot;</span> <span class="o">+</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">p</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">g</span><span class="p">]))</span> <span class="o">+</span> <span class="s2">&quot;]&quot;</span>
+<div class=" highlight hl-ipython3"><pre><span class="n">cache</span> <span class="o">=</span> <span class="p">{}</span>
 
+<span class="c1"># We store the solution and step lengths in terms of the graph&#39;s nodes and edges, respectively, </span>
+<span class="c1"># rather than the specs originally fed to the Case object.</span>
+<span class="k">def</span> <span class="nf">dp1</span><span class="p">(</span><span class="n">specs</span><span class="p">,</span> <span class="n">solution</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">step_lengths</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
     
-<span class="k">def</span> <span class="nf">dp_recurse</span><span class="p">(</span><span class="n">state_vector</span><span class="p">,</span> <span class="n">specs</span><span class="p">,</span> <span class="n">solution</span><span class="o">=</span><span class="p">[]):</span>
+    <span class="c1"># We have a global variable which caches oft-needed values.</span>
+    <span class="k">global</span> <span class="n">cache</span>
     
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    A recursive function which solves the scheduling problem via dynamic programming. </span>
-<span class="sd">    This function constructs a set of solutions together with their scores by successively solving </span>
-<span class="sd">    larger and larger subproblems of the main problem. If at any point a constraint is violated,</span>
-<span class="sd">    the function returns prematurely and no solutions are collected from that branch of the tree.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># The machine we start at for this subproblem.</span>
+    <span class="n">source</span> <span class="o">=</span> <span class="n">solution</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
     
-    <span class="c1"># We carry around a state vector to keep track of important values like </span>
-    <span class="c1"># how many days have passed, the machine&#39;s attributes, and the money we earned.</span>
-    <span class="c1"># These are updated in every step and passed down through the tree.</span>
-    <span class="n">day</span><span class="p">,</span> <span class="n">machine</span><span class="p">,</span> <span class="n">cash</span><span class="p">,</span> <span class="n">last_day</span> <span class="o">=</span> <span class="n">state_vector</span>
+    <span class="c1"># If we haven&#39;t stored these values yet, do it now. </span>
+    <span class="c1"># We need them later in this function call and many more times down the line.</span>
+    <span class="k">if</span> <span class="n">cache</span><span class="p">[</span><span class="n">source</span><span class="p">]</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+        <span class="n">cache</span><span class="p">[</span><span class="n">source</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">option</span> <span class="p">:</span> <span class="n">profit</span><span class="p">(</span><span class="n">specs</span><span class="p">[</span><span class="n">source</span><span class="p">],</span> <span class="n">spec</span><span class="p">)</span> <span class="k">for</span> <span class="n">option</span><span class="p">,</span><span class="n">spec</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">specs</span><span class="p">[</span><span class="n">source</span><span class="o">+</span><span class="mi">1</span><span class="p">:],</span> <span class="n">start</span><span class="o">=</span><span class="n">source</span><span class="o">+</span><span class="mi">1</span><span class="p">)}</span>
+
+    <span class="c1"># We get the list of possible next steps based on satisfaction of the cash constraint.</span>
+    <span class="n">cash_so_far</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">step_lengths</span><span class="p">)</span>
+    <span class="n">next_options</span> <span class="o">=</span> <span class="p">[</span><span class="n">option</span> <span class="k">for</span> <span class="n">option</span> <span class="ow">in</span> <span class="n">cache</span><span class="p">[</span><span class="n">source</span><span class="p">]</span> <span class="k">if</span> <span class="n">cash_so_far</span> <span class="o">+</span> <span class="n">cache</span><span class="p">[</span><span class="n">source</span><span class="p">][</span><span class="n">option</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">]</span>
     
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">specs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="c1"># If we reach this condition, there is no way to move forward so we return what we have.</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">next_options</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">step_lengths</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">solution</span><span class="p">)</span>
+
+    <span class="n">max_step_lengths</span><span class="p">,</span> <span class="n">max_solution</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">]),</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">option</span> <span class="ow">in</span> <span class="n">next_options</span><span class="p">:</span>
         
-        <span class="c1"># The base case. When there are no machines left in specs (a decision has been made about each machine),</span>
-        <span class="c1"># we have reached a full solution and can return the total money.</span>
-        
-        <span class="c1"># Add the rest of the profit plus the money we get from selling the machine.</span>
-        <span class="n">cash</span> <span class="o">+=</span> <span class="n">machine</span><span class="o">.</span><span class="n">g</span> <span class="o">*</span> <span class="p">(</span><span class="n">last_day</span> <span class="o">-</span> <span class="n">day</span><span class="p">)</span> <span class="o">+</span> <span class="n">machine</span><span class="o">.</span><span class="n">r</span>
-        
-        <span class="c1"># We return a list containing a tuple of score and solution. </span>
-        <span class="c1"># This list is appended to those that are returned from all the other leaf nodes, </span>
-        <span class="c1"># and these together form the full set of feasible solutions.</span>
-        <span class="n">soln_str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">solution</span><span class="p">))</span>
-        <span class="k">return</span> <span class="p">[(</span><span class="n">cash</span><span class="p">,</span> <span class="n">soln_str</span><span class="p">)]</span>
-    
-    <span class="k">else</span><span class="p">:</span>
-        
-        <span class="c1"># If we reach this point, we have not obtained a full solution </span>
-        <span class="c1"># and must continue through the tree toward a leaf node.</span>
-        
-        <span class="c1"># We need to collect and organize values which are important for the next step we are about to take.</span>
-        <span class="n">new_day</span><span class="p">,</span> <span class="n">new_p</span><span class="p">,</span> <span class="n">new_r</span><span class="p">,</span> <span class="n">new_g</span> <span class="o">=</span> <span class="n">specs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="n">new_machine</span> <span class="o">=</span> <span class="n">Machine</span><span class="p">(</span><span class="n">new_p</span><span class="p">,</span> <span class="n">new_r</span><span class="p">,</span> <span class="n">new_g</span><span class="p">)</span>
-        
-        
-        <span class="k">if</span> <span class="n">new_day</span> <span class="o">==</span> <span class="n">day</span><span class="p">:</span>  
-            
-            <span class="c1"># We need this to account for multiple machines offered on the same day.</span>
-            <span class="c1"># You may notice that it&#39;s possible to buy and sell multiple machines per day with this setup.</span>
-            <span class="c1"># However, we don&#39;t need to worry about these cases because they will always be suboptimal and thus ultimately discarded.</span>
-            <span class="c1"># To see this, consider: buying and selling the same machine on the same day means </span>
-            <span class="c1"># we were never able to start the machine and generate profit with it.</span>
-            <span class="c1"># That and R &lt; P for each machine means we always experience a net loss </span>
-            <span class="c1"># if we buy two or more machines per day.</span>
-            
-            <span class="n">new_cash</span> <span class="o">=</span> <span class="n">cash</span>
-            <span class="n">new_cash_zero</span> <span class="o">=</span> <span class="n">new_cash</span>
-        
-        <span class="k">else</span><span class="p">:</span>
-            
-            <span class="c1"># Otherwise, some time has passed and the machine has generated profit for us.</span>
-            <span class="c1"># Note: below, we are keeping track of two different money amounts,</span>
-            <span class="c1"># corresponding to the two outcomes of a decision to buy a machine.</span>
-            
-            <span class="c1"># This is the amount of cash we accumulated before &quot;today&quot; started, </span>
-            <span class="c1"># i.e., the amount of profit our machine made up until the morning of `new_day`.</span>
-            <span class="n">new_cash</span> <span class="o">=</span> <span class="n">cash</span> <span class="o">+</span> <span class="n">machine</span><span class="o">.</span><span class="n">g</span> <span class="o">*</span> <span class="p">(</span><span class="n">new_day</span> <span class="o">-</span> <span class="n">day</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
-            
-            <span class="c1"># If we don&#39;t buy a machine, the one we have stays running and making us money.</span>
-            <span class="n">new_cash_zero</span> <span class="o">=</span> <span class="n">new_cash</span> <span class="o">+</span> <span class="n">machine</span><span class="o">.</span><span class="n">g</span>
-        
-        <span class="c1"># If we do buy a machine, we gain the resale value of the old machine </span>
-        <span class="c1"># and lose the purchase cost of the new one.</span>
-        <span class="n">new_cash_one</span> <span class="o">=</span> <span class="n">new_cash</span> <span class="o">+</span> <span class="n">machine</span><span class="o">.</span><span class="n">r</span> <span class="o">-</span> <span class="n">new_machine</span><span class="o">.</span><span class="n">p</span>
-        
-        <span class="n">solutions</span> <span class="o">=</span> <span class="p">[]</span>
-        
-        <span class="k">if</span> <span class="n">new_cash_zero</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
-            
-            <span class="c1"># For this outcome, our state changes in that:</span>
-            <span class="c1"># time has elapsed,</span>
-            <span class="c1"># the machine from the last step is still in our possession,</span>
-            <span class="c1"># and we have made some money from our operations.</span>
-            
-            <span class="n">new_state_zero</span> <span class="o">=</span> <span class="p">[</span><span class="n">new_day</span><span class="p">,</span> <span class="n">machine</span><span class="p">,</span> <span class="n">new_cash_zero</span><span class="p">,</span> <span class="n">last_day</span><span class="p">]</span>
-            
-            <span class="c1"># This is the heart of the recursion: </span>
-            <span class="c1"># we call the same function again on an updated system </span>
-            <span class="c1"># and solve a slightly larger (or smaller, depending on your perspective) </span>
-            <span class="c1"># problem than the one in the previous level.</span>
-            <span class="c1"># The function call returns a list containing all solutions</span>
-            <span class="c1"># in the related paths down the tree, so we collect that list</span>
-            <span class="c1"># into a single object and pass it up to the next level. Once it gets</span>
-            <span class="c1"># to the top (root) of the tree, we have collected every solution from every branch.</span>
-            <span class="c1"># With `specs`, we pass along to the next level only the machines that have not yet been considered;</span>
-            <span class="c1"># the other ones have already been fully integrated into the solution so far,</span>
-            <span class="c1"># so we don&#39;t have to carry them around anymore.</span>
-            <span class="c1"># This has an additional benefit: when the specs are all gone, we know we have</span>
-            <span class="c1"># completely defined a solution and the base case is reached.</span>
-            <span class="n">solutions</span> <span class="o">+=</span> <span class="n">dp_recurse</span><span class="p">(</span><span class="n">new_state_zero</span><span class="p">,</span> <span class="n">specs</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">solution</span><span class="o">+</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-        
-        <span class="k">if</span> <span class="n">new_cash_one</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
-            
-            <span class="c1"># This condition will only trigger if our constraint has not been violated.</span>
-            <span class="c1"># That is, if we have to go into debt to purchase a machine, this branch</span>
-            <span class="c1"># does not lead to any feasible solutions and we ignore it.</span>
-            
-            <span class="n">new_state_one</span> <span class="o">=</span> <span class="p">[</span><span class="n">new_day</span><span class="p">,</span> <span class="n">new_machine</span><span class="p">,</span> <span class="n">new_cash_one</span><span class="p">,</span> <span class="n">last_day</span><span class="p">]</span>
-            <span class="n">solutions</span> <span class="o">+=</span> <span class="n">dp_recurse</span><span class="p">(</span><span class="n">new_state_one</span><span class="p">,</span> <span class="n">specs</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">solution</span><span class="o">+</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
-            
-        <span class="c1"># Once we&#39;ve collected the solutions from both subtrees, </span>
-        <span class="c1"># we send them up toward the top of the tree where they are used to find the best solution.</span>
-        <span class="k">return</span> <span class="n">solutions</span>
+        <span class="c1"># Recursive call: start solving each of the next smallest subproblems</span>
+        <span class="c1"># and return the solution which represents the optimal policy.</span>
+        <span class="n">this_step_lengths</span><span class="p">,</span> <span class="n">this_solution</span> <span class="o">=</span> <span class="n">dp1</span><span class="p">(</span><span class="n">specs</span><span class="p">,</span> <span class="n">solution</span><span class="o">+</span><span class="p">[</span><span class="n">option</span><span class="p">],</span> <span class="n">step_lengths</span><span class="o">+</span><span class="p">[</span><span class="n">cache</span><span class="p">[</span><span class="n">source</span><span class="p">][</span><span class="n">option</span><span class="p">]])</span>
+
+        <span class="c1"># Record the result of the optimal subproblem and return at the end.</span>
+        <span class="k">if</span> <span class="n">max_step_lengths</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">this_step_lengths</span><span class="o">.</span><span class="n">sum</span><span class="p">():</span>
+            <span class="n">max_step_lengths</span> <span class="o">=</span> <span class="n">this_step_lengths</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="n">max_solution</span> <span class="o">=</span> <span class="n">this_solution</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">max_step_lengths</span><span class="p">,</span> <span class="n">max_solution</span>
 </pre></div>
 
 </div>
@@ -12192,8 +12133,9 @@ array([[ 5.,  9.,  1.,  3.],
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>We can apply additional constraints, but only if we are capable of proving that solutions meet or violate those constraints. For the case of the cash constraint, we simply neglect searching further beyond an action which results in a net cash amount less than zero. We can neglect also solution paths which are provably incapable of reaching a score above the best among all solutions found so far. This is called <a href="https://en.wikipedia.org/wiki/Branch_and_bound">branch and bound</a> and is the basis for many efficient combinatorial search techniques, most notably in powerful (hard-coded) chess engines today as <em>alpha-beta pruning</em>.</p>
-<p>For our case, we can define a crude upper bound of the possible solution paths' scores as the sum of: the cash in hand today, the amount of profit made if the best remaining machine started today, and the maximum resale value among all remaining machines. This is the simplest form of upper bound, albeit inaccurate except in rare circumstances. Nonetheless, we know that each solution will respect this upper bound because we extrapolate using the absolute fastest rate of cash inflow. Adding the maximum resale value also accounts for any gains we may have made from buying and selling machines.</p>
+<p>We can apply additional constraints, but only if we are capable of proving that solutions meet or violate those constraints. For the case of the cash constraint, we simply neglect searching further beyond an action which results in a net cash amount less than zero.</p>
+<p>In addition to the cash constraint, we can neglect solution paths which are provably incapable of reaching a score above the best among all solutions found so far. This is called <a href="https://en.wikipedia.org/wiki/Branch_and_bound">branch and bound</a> and is the basis for many efficient combinatorial search techniques, most notably in powerful (hard-coded) chess engines today as <em>alpha-beta pruning</em>. Note that branch and bound is not essential to dynamic programming <em>per se</em>, but does help to remove low-quality paths from consideration and speed up convergence considerably.</p>
+<p>We need to define an upper bound of a partial solution's eventual value. Let us imagine that we have just purchased machine $i$. Let us create a new machine which has the highest profit generation of any machines which come after $i$ as well as the highest resale value of any of them. Then we replace our current machine at no cost and begin running the new one immediately. How much profit is possible at the end of the restructuring period after doing this defines a hard upper bound of the partial solution's eventual value.</p>
 
 </div>
 </div>
@@ -12205,62 +12147,54 @@ array([[ 5.,  9.,  1.,  3.],
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span class="n">lower_bound</span> <span class="o">=</span> <span class="mi">0</span>
 
-<span class="k">def</span> <span class="nf">dp_recurse_bnb</span><span class="p">(</span><span class="n">state_vector</span><span class="p">,</span> <span class="n">specs</span><span class="p">,</span> <span class="n">solution</span><span class="o">=</span><span class="p">[]):</span>
+<span class="k">def</span> <span class="nf">dp2</span><span class="p">(</span><span class="n">specs</span><span class="p">,</span> <span class="n">solution</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">step_lengths</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+
+    <span class="k">global</span> <span class="n">cache</span>
     
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    A recursive function which uses dynamic programming </span>
-<span class="sd">    and an additional branch-and-bound constraint </span>
-<span class="sd">    to further restrict the search space to feasible optima.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    
-    <span class="c1"># Addition one: a global variable representing the best score achieved in the search so far.</span>
+    <span class="c1"># Addition one: another global variable which stores a lower bound of the optimal solution</span>
+    <span class="c1"># which is used for comparison against the upper bound of partial solutions.</span>
     <span class="k">global</span> <span class="n">lower_bound</span>
+
+    <span class="n">source</span> <span class="o">=</span> <span class="n">solution</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="n">cache</span><span class="p">[</span><span class="n">source</span><span class="p">]</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+        <span class="n">cache</span><span class="p">[</span><span class="n">source</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">option</span> <span class="p">:</span> <span class="n">profit</span><span class="p">(</span><span class="n">specs</span><span class="p">[</span><span class="n">source</span><span class="p">],</span> <span class="n">spec</span><span class="p">)</span> 
+                            <span class="k">for</span> <span class="n">option</span><span class="p">,</span><span class="n">spec</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">specs</span><span class="p">[</span><span class="n">source</span><span class="o">+</span><span class="mi">1</span><span class="p">:],</span> <span class="n">start</span><span class="o">=</span><span class="n">source</span><span class="o">+</span><span class="mi">1</span><span class="p">)}</span>
+
+    <span class="n">cash_so_far</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">step_lengths</span><span class="p">)</span>
+
+    <span class="c1"># Addition two: calculate the upper bound of this branch and compare against the global lower bound</span>
+    <span class="n">profit_w_best</span> <span class="o">=</span> <span class="n">specs</span><span class="p">[</span><span class="n">source</span><span class="p">:,</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+    <span class="n">remaining_time</span> <span class="o">=</span> <span class="p">(</span><span class="n">specs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="n">specs</span><span class="p">[</span><span class="n">source</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">resale_w_best</span> <span class="o">=</span> <span class="n">specs</span><span class="p">[</span><span class="n">source</span><span class="p">:,</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">cash_so_far</span> <span class="o">+</span> <span class="p">(</span><span class="n">profit_w_best</span> <span class="o">*</span> <span class="n">remaining_time</span><span class="p">)</span> <span class="o">+</span> <span class="n">resale_w_best</span> <span class="o">&lt;</span> <span class="n">lower_bound</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">]),</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
+
+    <span class="n">next_options</span> <span class="o">=</span> <span class="p">[</span><span class="n">option</span> <span class="k">for</span> <span class="n">option</span> <span class="ow">in</span> <span class="n">cache</span><span class="p">[</span><span class="n">source</span><span class="p">]</span> <span class="k">if</span> <span class="n">cash_so_far</span> <span class="o">+</span> <span class="n">cache</span><span class="p">[</span><span class="n">source</span><span class="p">][</span><span class="n">option</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">]</span>
     
-    <span class="n">day</span><span class="p">,</span> <span class="n">machine</span><span class="p">,</span> <span class="n">cash</span><span class="p">,</span> <span class="n">last_day</span> <span class="o">=</span> <span class="n">state_vector</span>
-    
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">specs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="n">cash</span> <span class="o">+=</span> <span class="n">machine</span><span class="o">.</span><span class="n">g</span> <span class="o">*</span> <span class="p">(</span><span class="n">last_day</span> <span class="o">-</span> <span class="n">day</span><span class="p">)</span> <span class="o">+</span> <span class="n">machine</span><span class="o">.</span><span class="n">r</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">next_options</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
         
-        <span class="c1"># Addition two: a way to update the lower bound when a new, better solution is found.</span>
-        <span class="k">if</span> <span class="n">lower_bound</span> <span class="o">&lt;</span> <span class="n">cash</span><span class="p">:</span>
-            <span class="n">lower_bound</span> <span class="o">=</span> <span class="n">cash</span>
-            
-        <span class="n">soln_str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">solution</span><span class="p">))</span>
-        <span class="k">return</span> <span class="p">[(</span><span class="n">cash</span><span class="p">,</span> <span class="n">soln_str</span><span class="p">)]</span>
+        <span class="c1"># Addition three: tracking the lower bound as we find better and better solutions.</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">step_lengths</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">lower_bound</span> <span class="o">&lt;</span> <span class="n">value</span><span class="p">:</span>
+            <span class="n">lower_bound</span> <span class="o">=</span> <span class="n">value</span>
+
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">step_lengths</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">solution</span><span class="p">)</span>
+
+    <span class="n">max_step_lengths</span><span class="p">,</span> <span class="n">max_solution</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">]),</span> <span class="p">[]</span>
     
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">profit_w_best</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">machine</span><span class="o">.</span><span class="n">g</span><span class="p">,</span> <span class="nb">max</span><span class="p">(</span><span class="n">specs</span><span class="p">[:,</span><span class="mi">3</span><span class="p">]))</span> <span class="o">*</span> <span class="p">(</span><span class="n">last_day</span> <span class="o">-</span> <span class="n">day</span><span class="p">)</span>
-        <span class="n">resale_w_best</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">machine</span><span class="o">.</span><span class="n">r</span><span class="p">,</span> <span class="nb">max</span><span class="p">(</span><span class="n">specs</span><span class="p">[:,</span><span class="mi">2</span><span class="p">]))</span>
-    
-    <span class="c1"># Addition three: a way to abort further searching in the subtree </span>
-    <span class="c1"># when the partial solution is proven to be infeasible.</span>
-    <span class="c1"># Here, an upper bound is calculated for the money this partial solution may eventually earn. </span>
-    <span class="c1"># If the upper bound of the solutions derived from here is still lower than the current best solution, </span>
-    <span class="c1"># there&#39;s no point in continuing.</span>
-    <span class="c1"># Calculated as sum of: current money, profit if best remaining machine started today, </span>
-    <span class="c1"># and the maximum resale value out of the remaining machines. Although lenient, we will</span>
-    <span class="c1"># see it is still surprisingly effective.</span>
-    <span class="k">if</span> <span class="n">cash</span> <span class="o">+</span> <span class="n">profit_w_best</span> <span class="o">+</span> <span class="n">resale_w_best</span> <span class="o">&lt;=</span> <span class="n">lower_bound</span><span class="p">:</span>
-        <span class="k">return</span> <span class="p">[]</span>
-    
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">new_day</span><span class="p">,</span> <span class="n">new_p</span><span class="p">,</span> <span class="n">new_r</span><span class="p">,</span> <span class="n">new_g</span> <span class="o">=</span> <span class="n">specs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="n">new_machine</span> <span class="o">=</span> <span class="n">Machine</span><span class="p">(</span><span class="n">new_p</span><span class="p">,</span> <span class="n">new_r</span><span class="p">,</span> <span class="n">new_g</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">new_day</span> <span class="o">==</span> <span class="n">day</span><span class="p">:</span>
-            <span class="n">new_cash</span> <span class="o">=</span> <span class="n">cash</span>
-            <span class="n">new_cash_zero</span> <span class="o">=</span> <span class="n">new_cash</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">new_cash</span> <span class="o">=</span> <span class="n">cash</span> <span class="o">+</span> <span class="n">machine</span><span class="o">.</span><span class="n">g</span> <span class="o">*</span> <span class="p">(</span><span class="n">new_day</span> <span class="o">-</span> <span class="n">day</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
-            <span class="n">new_cash_zero</span> <span class="o">=</span> <span class="n">new_cash</span> <span class="o">+</span> <span class="n">machine</span><span class="o">.</span><span class="n">g</span>
-        <span class="n">new_cash_one</span> <span class="o">=</span> <span class="n">new_cash</span> <span class="o">+</span> <span class="n">machine</span><span class="o">.</span><span class="n">r</span> <span class="o">-</span> <span class="n">new_machine</span><span class="o">.</span><span class="n">p</span>
-        <span class="n">solutions</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">if</span> <span class="n">new_cash_zero</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">new_state_zero</span> <span class="o">=</span> <span class="p">[</span><span class="n">new_day</span><span class="p">,</span> <span class="n">machine</span><span class="p">,</span> <span class="n">new_cash_zero</span><span class="p">,</span> <span class="n">last_day</span><span class="p">]</span>
-            <span class="n">solutions</span> <span class="o">+=</span> <span class="n">dp_recurse_bnb</span><span class="p">(</span><span class="n">new_state_zero</span><span class="p">,</span> <span class="n">specs</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">solution</span><span class="o">+</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-        <span class="k">if</span> <span class="n">new_cash_one</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">new_state_one</span> <span class="o">=</span> <span class="p">[</span><span class="n">new_day</span><span class="p">,</span> <span class="n">new_machine</span><span class="p">,</span> <span class="n">new_cash_one</span><span class="p">,</span> <span class="n">last_day</span><span class="p">]</span>
-            <span class="n">solutions</span> <span class="o">+=</span> <span class="n">dp_recurse_bnb</span><span class="p">(</span><span class="n">new_state_one</span><span class="p">,</span> <span class="n">specs</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">solution</span><span class="o">+</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
-        <span class="k">return</span> <span class="n">solutions</span>
+    <span class="c1"># Addition four: we permute the list of next steps to mix up the traversal order. </span>
+    <span class="c1"># The intention is to introduce mixing and find higher-quality solutions faster, </span>
+    <span class="c1"># to make the pruning more effective.</span>
+    <span class="k">for</span> <span class="n">option</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">permutation</span><span class="p">(</span><span class="n">next_options</span><span class="p">):</span>
+
+        <span class="n">this_step_lengths</span><span class="p">,</span> <span class="n">this_solution</span> <span class="o">=</span> <span class="n">dp2</span><span class="p">(</span><span class="n">specs</span><span class="p">,</span> <span class="n">solution</span><span class="o">+</span><span class="p">[</span><span class="n">option</span><span class="p">],</span> <span class="n">step_lengths</span><span class="o">+</span><span class="p">[</span><span class="n">cache</span><span class="p">[</span><span class="n">source</span><span class="p">][</span><span class="n">option</span><span class="p">]])</span>
+
+        <span class="k">if</span> <span class="n">max_step_lengths</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">this_step_lengths</span><span class="o">.</span><span class="n">sum</span><span class="p">():</span>
+            <span class="n">max_step_lengths</span> <span class="o">=</span> <span class="n">this_step_lengths</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="n">max_solution</span> <span class="o">=</span> <span class="n">this_solution</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">max_step_lengths</span><span class="p">,</span> <span class="n">max_solution</span>
 </pre></div>
 
 </div>
@@ -12282,43 +12216,26 @@ array([[ 5.,  9.,  1.,  3.],
 <div class="prompt input_prompt">In&nbsp;[6]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span class="k">def</span> <span class="nf">solve</span><span class="p">(</span><span class="n">f_recurse</span><span class="p">,</span> <span class="n">cases</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<div class=" highlight hl-ipython3"><pre><span class="k">def</span> <span class="nf">solve</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">cases</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
     
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Solve all &quot;cases&quot; using preferred recursive function.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     
+    <span class="k">global</span> <span class="n">cache</span>
     <span class="k">global</span> <span class="n">lower_bound</span>
-    
-    <span class="n">output_str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
     
     <span class="k">for</span> <span class="n">k</span><span class="p">,</span><span class="n">case</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">cases</span><span class="p">):</span>
         
-        <span class="n">lower_bound</span> <span class="o">=</span> <span class="mi">0</span>        
-        <span class="n">state_vector</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">Machine</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">)]</span> <span class="o">+</span> <span class="n">case</span><span class="o">.</span><span class="n">inits</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>  <span class="c1"># we start at day 0 with effectively no machine</span>
+        <span class="n">N</span><span class="p">,</span><span class="n">C</span><span class="p">,</span><span class="n">D</span> <span class="o">=</span> <span class="n">case</span><span class="o">.</span><span class="n">inits</span>
+        <span class="n">cache</span> <span class="o">=</span> <span class="p">{</span><span class="n">i</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N</span><span class="o">+</span><span class="mi">2</span><span class="p">)}</span>
+        <span class="n">lower_bound</span> <span class="o">=</span> <span class="mi">0</span>
         
-        <span class="c1"># This single call constructs a list of solutions from a tree of solution paths </span>
-        <span class="c1"># by recursing until every node in the tree is either </span>
-        <span class="c1"># safely discarded or explored to the leaves.</span>
-        <span class="n">solutions</span> <span class="o">=</span> <span class="n">f_recurse</span><span class="p">(</span><span class="n">state_vector</span><span class="p">,</span> <span class="n">case</span><span class="o">.</span><span class="n">specs</span><span class="p">)</span>
+        <span class="n">best_profit</span><span class="p">,</span> <span class="n">best_solution</span> <span class="o">=</span> <span class="n">f</span><span class="p">(</span><span class="n">case</span><span class="o">.</span><span class="n">specs</span><span class="p">)</span>
         
-        <span class="c1"># Here we use a trick where sorting a list of tuples only sorts by the first element of each tuple. </span>
-        <span class="c1"># So we sort by money made, descending, to get the best solutions.</span>
-        <span class="n">srt_solns</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">solutions</span><span class="p">,</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        
-        <span class="c1"># The best solution is the one with the most money after the period has elapsed.</span>
-        <span class="n">best_profit</span><span class="p">,</span> <span class="n">best_solution</span> <span class="o">=</span> <span class="n">srt_solns</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># note: best_solution returned in order of specs stored in Case instance, not necessarily the order given in the file</span>
-        <span class="n">case_str</span> <span class="o">=</span> <span class="s2">&quot;Case {}: {:d}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">k</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">best_profit</span><span class="p">))</span>
         <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+            <span class="n">case_str</span> <span class="o">=</span> <span class="s2">&quot;Case {}: {:d}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">k</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">best_profit</span><span class="o">.</span><span class="n">sum</span><span class="p">()))</span>
             <span class="nb">print</span><span class="p">(</span><span class="n">case_str</span><span class="p">)</span>
-        
-        <span class="c1"># Assemble the output in a descriptive fashion.</span>
-        <span class="n">output_str</span> <span class="o">+=</span> <span class="n">case_str</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
-        
-    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">&quot;output.txt&quot;</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
-        
-        <span class="c1"># Put the maximum score for each case in a file and save it to disk.</span>
-        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">output_str</span><span class="p">)</span>
 </pre></div>
 
 </div>
@@ -12340,8 +12257,9 @@ array([[ 5.,  9.,  1.,  3.],
 <div class="prompt input_prompt">In&nbsp;[7]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span class="n">solve</span><span class="p">(</span><span class="n">dp_recurse</span><span class="p">,</span> <span class="n">cases</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
-<span class="n">solve</span><span class="p">(</span><span class="n">dp_recurse_bnb</span><span class="p">,</span> <span class="n">cases</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+<div class=" highlight hl-ipython3"><pre><span class="n">cases</span> <span class="o">=</span> <span class="p">[</span><span class="n">generate_case</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">11</span><span class="p">,</span> <span class="mi">20</span><span class="p">)]</span>
+<span class="n">solve</span><span class="p">(</span><span class="n">dp1</span><span class="p">,</span> <span class="n">cases</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+<span class="n">solve</span><span class="p">(</span><span class="n">dp2</span><span class="p">,</span> <span class="n">cases</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
 </pre></div>
 
 </div>
@@ -12358,8 +12276,83 @@ array([[ 5.,  9.,  1.,  3.],
 
 
 <div class="output_subarea output_stream output_stdout output_text">
-<pre>Case 1: 47
-Case 1: 47
+<pre>Case 1: 28
+Case 1: 28
+</pre>
+</div>
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Here we can take a quick look at the cache:</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[8]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span class="k">def</span> <span class="nf">pprint_cache</span><span class="p">(</span><span class="n">cache</span><span class="p">):</span>
+    <span class="n">N</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">cache</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="o">+</span><span class="mi">1</span>
+    <span class="n">output</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">N</span><span class="p">,</span><span class="n">N</span><span class="p">))</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+    <span class="k">for</span> <span class="n">n1</span> <span class="ow">in</span> <span class="n">cache</span><span class="p">:</span>
+        <span class="n">row</span> <span class="o">=</span> <span class="n">cache</span><span class="p">[</span><span class="n">n1</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">n2</span> <span class="ow">in</span> <span class="n">row</span><span class="p">:</span>
+            <span class="n">output</span><span class="p">[</span><span class="n">n1</span><span class="p">,</span><span class="n">n2</span><span class="p">]</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="n">n2</span><span class="p">]</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[9]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span class="n">solve</span><span class="p">(</span><span class="n">dp2</span><span class="p">,</span> <span class="p">[</span><span class="n">generate_case</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">25</span><span class="p">,</span> <span class="mi">100</span><span class="p">)],</span> <span class="kc">True</span><span class="p">)</span>
+<span class="n">pprint_cache</span><span class="p">(</span><span class="n">cache</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>Case 1: 300
+[[-inf   7.   1.   3.   1.   7.   6.  13.  10.   3.   8.   1.   2.  25.]
+ [-inf -inf   2.  18.  46.  64.  81.  90.  99.  98. 111. 136. 161. 196.]
+ [-inf -inf -inf  -8.  20.  38.  55.  64.  73.  72.  85. 110. 135. 170.]
+ [-inf -inf -inf -inf  -3.   9.  17.  25.  28.  24.  33.  42.  55.  84.]
+ [-inf -inf -inf -inf -inf   8.  34.  44.  59.  61.  78. 119. 156. 197.]
+ [-inf -inf -inf -inf -inf -inf  18.  29.  50.  55.  76. 133. 182. 229.]
+ [-inf -inf -inf -inf -inf -inf -inf  -4.  11.  13.  30.  71. 108. 149.]
+ [-inf -inf -inf -inf -inf -inf -inf -inf  11.  13.  30.  71. 108. 149.]
+ [-inf -inf -inf -inf -inf -inf -inf -inf -inf -10.   3.  28.  53.  88.]
+ [-inf -inf -inf -inf -inf -inf -inf -inf -inf -inf   0.  25.  50.  85.]
+ [-inf -inf -inf -inf -inf -inf -inf -inf -inf -inf -inf  37.  74. 115.]
+ [-inf -inf -inf -inf -inf -inf -inf -inf -inf -inf -inf -inf  15.  56.]
+ [-inf -inf -inf -inf -inf -inf -inf -inf -inf -inf -inf -inf -inf  27.]
+ [-inf -inf -inf -inf -inf -inf -inf -inf -inf -inf -inf -inf -inf -inf]]
 </pre>
 </div>
 </div>
@@ -12376,19 +12369,6 @@ Case 1: 47
 </div>
 </div>
 </div>
-<div class="cell border-box-sizing code_cell rendered">
-<div class="input">
-<div class="prompt input_prompt">In&nbsp;[8]:</div>
-<div class="inner_cell">
-    <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span class="n">gen_cases</span> <span class="o">=</span> <span class="p">[</span><span class="n">generate_case</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">50</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">)]</span>
-</pre></div>
-
-</div>
-</div>
-</div>
-
-</div>
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div>
 <div class="inner_cell">
@@ -12400,22 +12380,63 @@ Case 1: 47
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[9]:</div>
+<div class="prompt input_prompt">In&nbsp;[10]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span class="n">t0</span> <span class="o">=</span> <span class="n">time</span><span class="p">()</span>
-<span class="n">solve</span><span class="p">(</span><span class="n">dp_recurse</span><span class="p">,</span> <span class="n">gen_cases</span><span class="p">)</span>
-<span class="n">t1</span> <span class="o">=</span> <span class="n">time</span><span class="p">()</span>
-<span class="n">solve</span><span class="p">(</span><span class="n">dp_recurse_bnb</span><span class="p">,</span> <span class="n">gen_cases</span><span class="p">)</span>
-<span class="n">t2</span> <span class="o">=</span> <span class="n">time</span><span class="p">()</span>
-<span class="n">vanilla_time</span> <span class="o">=</span> <span class="n">t1</span><span class="o">-</span><span class="n">t0</span>
-<span class="n">bnb_time</span> <span class="o">=</span> <span class="n">t2</span><span class="o">-</span><span class="n">t1</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Time for vanilla DP: {:.1f}s for {:d} cases&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">vanilla_time</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">gen_cases</span><span class="p">)))</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Time for   BnB   DP: {:.1f}s for {:d} cases&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">bnb_time</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">gen_cases</span><span class="p">)))</span>
-<span class="k">if</span> <span class="n">vanilla_time</span> <span class="o">&gt;</span> <span class="n">bnb_time</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Vanilla is {:.1f}x slower&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">vanilla_time</span><span class="o">/</span><span class="n">bnb_time</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
-<span class="k">else</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  BnB   is {:.1f}x slower&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">bnb_time</span><span class="o">/</span><span class="n">vanilla_time</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+<div class=" highlight hl-ipython3"><pre><span class="k">def</span> <span class="nf">compare</span><span class="p">(</span><span class="n">f1</span><span class="p">,</span> <span class="n">f2</span><span class="p">,</span> <span class="n">NCD</span><span class="p">,</span> <span class="n">time_limit</span><span class="o">=</span><span class="mi">60</span><span class="p">):</span>
+    
+    <span class="k">global</span> <span class="n">cache</span>
+    <span class="k">global</span> <span class="n">lower_bound</span>
+    
+    <span class="n">times1</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">times2</span> <span class="o">=</span> <span class="mi">0</span>
+    
+    <span class="n">t0</span> <span class="o">=</span> <span class="n">time</span><span class="p">()</span>
+    <span class="k">while</span> <span class="n">time</span><span class="p">()</span><span class="o">-</span><span class="n">t0</span> <span class="o">&lt;=</span> <span class="n">time_limit</span><span class="p">:</span>
+        
+        <span class="n">case</span> <span class="o">=</span> <span class="n">generate_case</span><span class="p">(</span><span class="o">*</span><span class="n">NCD</span><span class="p">)</span>
+        
+        <span class="n">N</span><span class="p">,</span><span class="n">C</span><span class="p">,</span><span class="n">D</span> <span class="o">=</span> <span class="n">case</span><span class="o">.</span><span class="n">inits</span>
+        
+        <span class="n">tx</span> <span class="o">=</span> <span class="n">time</span><span class="p">()</span>
+        
+        <span class="n">cache</span> <span class="o">=</span> <span class="p">{</span><span class="n">i</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N</span><span class="o">+</span><span class="mi">2</span><span class="p">)}</span>
+        <span class="n">lower_bound</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">best_profit1</span><span class="p">,</span> <span class="n">best_solution1</span> <span class="o">=</span> <span class="n">f1</span><span class="p">(</span><span class="n">case</span><span class="o">.</span><span class="n">specs</span><span class="p">)</span>
+        
+        <span class="n">ty</span> <span class="o">=</span> <span class="n">time</span><span class="p">()</span>
+        
+        <span class="n">cache</span> <span class="o">=</span> <span class="p">{</span><span class="n">i</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N</span><span class="o">+</span><span class="mi">2</span><span class="p">)}</span>
+        <span class="n">lower_bound</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">best_profit2</span><span class="p">,</span> <span class="n">best_solution2</span> <span class="o">=</span> <span class="n">f2</span><span class="p">(</span><span class="n">case</span><span class="o">.</span><span class="n">specs</span><span class="p">)</span>
+        
+        <span class="n">tz</span> <span class="o">=</span> <span class="n">time</span><span class="p">()</span>
+        
+        <span class="n">time1</span> <span class="o">=</span> <span class="n">ty</span> <span class="o">-</span> <span class="n">tx</span>
+        <span class="n">times1</span> <span class="o">+=</span> <span class="n">time1</span>
+        
+        <span class="n">time2</span> <span class="o">=</span> <span class="n">tz</span> <span class="o">-</span> <span class="n">ty</span>
+        <span class="n">times2</span> <span class="o">+=</span> <span class="n">time2</span>
+            
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Total time for DP1: {:.1f}s&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">times1</span><span class="p">))</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Total time for DP2: {:.1f}s&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">times2</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">times1</span> <span class="o">&gt;</span> <span class="n">times2</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;DP1 takes {:.1f}x longer on average&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">times1</span><span class="o">/</span><span class="n">times2</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;DP2 takes {:.1f}x longer on average&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">times2</span><span class="o">/</span><span class="n">times1</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[11]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span class="n">compare</span><span class="p">(</span><span class="n">dp1</span><span class="p">,</span> <span class="n">dp2</span><span class="p">,</span> <span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="mi">35</span><span class="p">,</span> <span class="mi">50</span><span class="p">),</span> <span class="n">time_limit</span><span class="o">=</span><span class="mi">600</span><span class="p">)</span>
 </pre></div>
 
 </div>
@@ -12432,9 +12453,9 @@ Case 1: 47
 
 
 <div class="output_subarea output_stream output_stdout output_text">
-<pre>Time for vanilla DP: 1348.1s for 100 cases
-Time for   BnB   DP: 3.9s for 100 cases
-Vanilla is 340.7x slower
+<pre>Total time for DP1: 596.9s
+Total time for DP2: 6.3s
+DP1 takes 93.1x longer on average
 </pre>
 </div>
 </div>
@@ -12447,8 +12468,7 @@ Vanilla is 340.7x slower
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>So branch and bound speeds up the wall-clock solution time considerably by pruning the tree's branches that are useless to continue evaluating.</p>
-<p>In general, branch and bound will provide quicker solutions compared to the vanilla implementation when the problem size is larger (dependent on how you define the bounding heuristic). There are two interrelated reasons for this: discarding partial solutions high up in the tree removes a large number of node evaluations, and this effect is much larger when the tree is much deeper and the pruning happens sooner. Discarding one subtree at level $m$ of the whole tree removes $2^{n-m}$ solutions from consideration. If $m$ is small, the solution space is cut down by a relatively large fraction and convergence occurs faster by virtue of requiring the exploration of fewer solutions.</p>
+<p>Surprisingly, even though quite lenient, this upper bound proves very effective at speeding up convergence. The upper bound is stricter closer to the final state (there are fewer good machines available) and so prunes more aggressively there. As the graph gets deeper, too, the pruning happens high enough that the speedup over the vanilla implementation is remarkable.</p>
 
 </div>
 </div>
@@ -12466,7 +12486,7 @@ Vanilla is 340.7x slower
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <p>In this tutorial you learned what dynamic programming really is, and how to properly approach a problem that warrants it. You also learned that dynamic programming is not incompatible with other methods and indeed benefits from ones which discard low-quality solutions early.</p>
-<p>There are many other ways to solve this problem, for instance brute force search or evolutionary algorithms, but none as thorough, direct, and efficient.</p>
+<p>There are many other ways to solve this problem, for instance brute force search, tree search, or evolutionary algorithms, but none as thorough, direct, and efficient.</p>
 
 </div>
 </div>
